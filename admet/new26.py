@@ -89,6 +89,53 @@ def get_xyz_from_mol(mol):
     except Exception:
         return None
 
+def get_cid_from_name(name):
+    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{name}/cids/JSON"
+    response = requests.get(url)
+    if response.status_code == 200:
+        cids = response.json().get('IdentifierList', {}).get('CID', [])
+        return cids[0] if cids else None
+    return None
+
+def get_similar_compounds(cid, threshold=90, max_results=5):
+    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/similarity/cid/{cid}/cids/JSON?Threshold={threshold}&MaxRecords={max_results}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json().get('IdentifierList', {}).get('CID', [])
+    return []
+
+def get_compound_info(cid):
+    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/property/IUPACName,CanonicalSMILES,MolecularFormula,MolecularWeight/JSON"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json()['PropertyTable']['Properties'][0]
+    return {}
+
+st.title("Top 5 Similar Compounds from PubChem")
+
+compound_name = st.text_input("Enter a compound name")
+
+if compound_name:
+    cid = get_cid_from_name(compound_name)
+    if cid:
+        st.success(f"Found CID for '{compound_name}': {cid}")
+        st.subheader("Fetching top 5 similar compounds (>90% similarity)...")
+        similar_cids = get_similar_compounds(cid, threshold=90, max_results=5)
+        
+        if similar_cids:
+            for i, scid in enumerate(similar_cids, 1):
+                info = get_compound_info(scid)
+                st.markdown(f"### Compound {i} (CID: {scid})")
+                st.write("IUPAC Name:", info.get("IUPACName", "N/A"))
+                st.write("SMILES:", info.get("CanonicalSMILES", "N/A"))
+                st.write("Formula:", info.get("MolecularFormula", "N/A"))
+                st.write("Molecular Weight:", info.get("MolecularWeight", "N/A"))
+                st.markdown("---")
+        else:
+            st.warning("No similar compounds found with >90% similarity.")
+    else:
+        st.error("Compound not found in PubChem.")
+
 def calculate_physicochemical_properties(mol):
     if not mol: return {"Error": "Invalid molecule object"}
     properties = {}
