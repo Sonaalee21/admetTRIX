@@ -622,7 +622,7 @@ elif nav_selected == "Analysis":
 
 elif nav_selected == "About":
     st.markdown("<div class='page-title'>ℹ️ ADMETrix and The Idea Behind It!</div>", unsafe_allow_html=True)
-    st.markdown("""<div class="circle-img-container"><img src="https://raw.githubusercontent.com/SonaliLakhamade/ADMETrix/main/Sonali_Lakhamade.jpg" alt="Sonali Lakhamade" class="circle-img"/></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="circle-img-container"><img src="https://media.licdn.com/dms/image/v2/D4D03AQG40jMywf_Vrg/profile-displayphoto-shrink_200_200/B4DZW9E1mDH4AY-/0/1742633921321?e=1752105600&v=beta&t=n6FwJ6YlbPn7YEe2pQCinw6-cdC3AodULhdvq9TSM_0" alt="Sonali Lakhamade" class="circle-img"/></div>""", unsafe_allow_html=True)
     st.markdown('<div class="author-name">Sonali Lakhamade</div>', unsafe_allow_html=True)
     st.markdown('<div class="author-title">Author & Developer</div>', unsafe_allow_html=True)
     st.markdown("""<div class="content-box"><b>ADMETrix</b> was developed as part of my Master's degree in Bioinformatics at Fergusson College (Autonomous), affiliated with Savitribai Phule Pune University... </div>""", unsafe_allow_html=True) # Content truncated for brevity
