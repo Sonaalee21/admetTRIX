@@ -1,12 +1,12 @@
 # admetrix_app.py
 
 import streamlit as st
-from datetime import datetime
-import base64
+# from datetime import datetime # Unused
+# import base64 # Unused
 import io
 import pandas as pd
-import py3Dmol
-from stmol import showmol
+import py3Dmol # Keep for stmol dependency, though not directly used
+# from stmol import showmol # Imported conditionally
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches # For BOILED-Egg ellipse
@@ -21,7 +21,6 @@ try:
     from rdkit.Chem import rdMolDescriptors
     RDKIT_AVAILABLE = True
 except ImportError:
-    # Error will be displayed prominently on the Analysis page if needed
     RDKIT_AVAILABLE = False
 
 # --- stmol Import ---
@@ -35,7 +34,7 @@ except ImportError:
 st.set_page_config(
     layout="wide",
     page_title="ADMETriX",
-    page_icon="🧬" # Changed Icon
+    page_icon="🧬"
 )
 
 # --- NAVIGATION STATE & OTHER SESSION STATES ---
@@ -49,17 +48,24 @@ if "selected_molecule_index" not in st.session_state:
     st.session_state.selected_molecule_index = 0
 if "current_pubchem_search_results" not in st.session_state:
     st.session_state.current_pubchem_search_results = None
+# Added for the simplified PubChem search when RDKit is not available
+if "current_pubchem_main_cid_no_rdkit" not in st.session_state:
+    st.session_state.current_pubchem_main_cid_no_rdkit = None
+if "current_pubchem_search_name_no_rdkit" not in st.session_state:
+    st.session_state.current_pubchem_search_name_no_rdkit = ""
+
 
 # --- Navigation Function ---
 def update_nav(label):
-    """Callback function to update navigation state."""
     st.session_state["nav_selected"] = label
     if label != "Analysis":
-        # Reset analysis state if navigating away
         st.session_state.analysis_triggered = False
         st.session_state.molecule_data_store = []
         st.session_state.selected_molecule_index = 0
         st.session_state.current_pubchem_search_results = None
+        st.session_state.current_pubchem_main_cid_no_rdkit = None
+        st.session_state.current_pubchem_search_name_no_rdkit = ""
+
 
 # --- RDKIT/HELPER FUNCTIONS (Conditional on RDKit availability) ---
 if RDKIT_AVAILABLE:
@@ -127,7 +133,7 @@ if RDKIT_AVAILABLE:
         if not props or props.get("Error_PropertyCalculation"): return {"Error": props.get("Error_PropertyCalculation", "Missing property data")}
         required_keys = ["Molecular Weight (MW)", "LogP (Crippen)", "Topological Polar Surface Area (TPSA)", "Hydrogen Bond Acceptors (HBA)", "Hydrogen Bond Donors (HBD)", "Rotatable Bonds", "Molar Refractivity", "Number of Atoms", "Number of Rings"]
         for key in required_keys:
-            if not isinstance(props.get(key), (int, float)): return {"Error": f"Invalid property for rules: {key}"}
+            if not isinstance(props.get(key), (int, float)): return {"Error": f"Invalid or missing property for rules: {key} (Value: {props.get(key)})"}
         mw, logp, hbd, hba, tpsa, rb, mr, num_atoms, num_rings = (props[k] for k in required_keys)
         rules = {}
         lip_v = (mw > 500) + (logp > 5) + (hbd > 5) + (hba > 10)
@@ -146,7 +152,7 @@ if RDKIT_AVAILABLE:
         if not props or props.get("Error_PropertyCalculation"): return {"Error": props.get("Error_PropertyCalculation", "Missing property data")}
         required_keys = ["Molecular Weight (MW)", "LogP (Crippen)", "Topological Polar Surface Area (TPSA)", "Hydrogen Bond Donors (HBD)", "Hydrogen Bond Acceptors (HBA)"]
         for key in required_keys:
-            if not isinstance(props.get(key), (int, float)): return {"Error": f"Invalid property for PK preds: {key}"}
+            if not isinstance(props.get(key), (int, float)): return {"Error": f"Invalid or missing property for PK preds: {key} (Value: {props.get(key)})"}
         mw, logp, tpsa, hbd, hba = (props[k] for k in required_keys)
         pk_preds = {}
         lip_v = (mw > 500) + (logp > 5) + (hbd > 5) + (hba > 10)
@@ -168,15 +174,25 @@ if RDKIT_AVAILABLE:
 
     def calculate_boiled_egg_data(all_molecule_data):
         boiled_data = []
-        for data in all_molecule_data:
-            props = data.get("physchem")
+        for data_item in all_molecule_data: # Renamed to avoid conflict with outer 'data' in get_bioavailability_radar_data
+            props = data_item.get("physchem")
             if props and not props.get("Error_PropertyCalculation"):
                  logp = props.get("LogP (Crippen)")
                  tpsa = props.get("Topological Polar Surface Area (TPSA)")
-                 name = data.get("name", "Unknown")
+                 name = data_item.get("name", "Unknown")
                  if isinstance(logp, (int, float)) and isinstance(tpsa, (int, float)):
                      boiled_data.append({"name": name, "WLOGP": logp, "TPSA": tpsa})
         return boiled_data
+else: # RDKit not available
+    def get_mol_from_sdf_string(sdf_string): return None
+    def get_mol_from_smiles(smiles): return None
+    def generate_2d_image(mol, size=(300, 300)): return None
+    def get_xyz_from_mol(mol): return None
+    def calculate_physicochemical_properties(mol): return {"Error": "RDKit not available."}
+    def check_drug_likeness_rules(props): return {"Error": "RDKit not available."}
+    def predict_pharmacokinetics(props): return {"Error": "RDKit not available."}
+    def get_bioavailability_radar_data(props): return None
+    def calculate_boiled_egg_data(all_molecule_data): return []
 
 # --- PLOTTING FUNCTIONS ---
 def plot_bioavailability_radar(radar_data, mol_name="Molecule"):
@@ -272,160 +288,100 @@ st.markdown("""
     body, .stApp {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         color: #333;
-        background-color: #f0f8ff; /* Light AliceBlue background */
+        background-color: #f0f8ff;
     }
-
     /* Main Title */
     .main-title-container {
-        padding: 1rem 0;
-        margin-bottom: 1rem;
-        border-radius: 10px;
-        background: linear-gradient(90deg, #00796B, #00ACC1); /* Teal/Cyan gradient */
-        box-shadow: 0 4px 15px rgba(0, 121, 107, 0.3);
-        text-align: center;
+        padding: 1rem 0; margin-bottom: 1rem; border-radius: 10px;
+        background: linear-gradient(90deg, #00796B, #00ACC1);
+        box-shadow: 0 4px 15px rgba(0, 121, 107, 0.3); text-align: center;
     }
     .main-title {
-        font-size: 3.5rem;
-        font-weight: 700; /* Bolder */
-        color: white;
-        letter-spacing: 3px;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        margin: 0; /* Remove default margins */
+        font-size: 3.5rem; font-weight: 700; color: white;
+        letter-spacing: 3px; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3); margin: 0;
     }
-
-    /* Navigation Buttons - Target standard Streamlit buttons */
+    /* Navigation Buttons */
      .stButton>button {
-        border-radius: 20px !important;
-        border: 1px solid #00796B !important; /* Teal border */
-        background: linear-gradient(145deg, #ffffff, #e0f2f1) !important; /* White to light teal */
-        color: #00695C !important; /* Dark Teal text */
-        padding: 0.5rem 1.5rem !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
+        border-radius: 20px !important; border: 1px solid #00796B !important;
+        background: linear-gradient(145deg, #ffffff, #e0f2f1) !important;
+        color: #00695C !important; padding: 0.5rem 1.5rem !important;
+        font-weight: 600 !important; transition: all 0.3s ease !important;
         box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1) !important;
-        width: 100% !important; /* Make buttons fill columns */
-        margin-bottom: 0.5rem; /* Add space below nav buttons */
+        width: 100% !important; margin-bottom: 0.5rem;
     }
     .stButton>button:hover {
-        background: linear-gradient(145deg, #00796B, #00ACC1) !important; /* Teal/Cyan gradient on hover */
-        color: white !important;
-        border-color: #004D40 !important;
+        background: linear-gradient(145deg, #00796B, #00ACC1) !important;
+        color: white !important; border-color: #004D40 !important;
         box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.2) !important;
         transform: translateY(-2px) !important;
     }
-    /* Style specific buttons differently if needed */
-     .stDownloadButton>button { /* Standard download button style */
-        background: #FFB300 !important; /* Amber */
-        color: #424242 !important;
+     .stDownloadButton>button {
+        background: #FFB300 !important; color: #424242 !important;
         border-color: #FFA000 !important;
      }
      .stDownloadButton>button:hover {
-        background: #FFA000 !important;
-        border-color: #FF6F00 !important;
+        background: #FFA000 !important; border-color: #FF6F00 !important;
         color: white !important;
      }
-     /* Primary Action Button (e.g., Start Analysis) */
-      button[kind="primary"] {
-         background: linear-gradient(145deg, #00897B, #00695C) !important; /* Darker Teal gradient */
-         color: white !important;
-         border-color: #004D40 !important;
-      }
-       button[kind="primary"]:hover {
-         background: linear-gradient(145deg, #00695C, #004D40) !important;
-         border-color: #00332C !important;
-       }
-
-
     /* Page Titles */
     .page-title {
-        font-size: 2.5rem; color: #004D40; /* Darkest Teal */
-        border-bottom: 3px solid #00ACC1; /* Cyan accent */
-        padding-bottom: 0.6rem; margin-top: 1.5rem; margin-bottom: 2rem;
-        font-weight: 600;
+        font-size: 2.5rem; color: #004D40; border-bottom: 3px solid #00ACC1;
+        padding-bottom: 0.6rem; margin-top: 1.5rem; margin-bottom: 2rem; font-weight: 600;
     }
     .page-subtitle {
-        font-size: 1.5rem; color: #00796B; /* Teal */
-        margin-bottom: 1.2rem; font-weight: 600;
+        font-size: 1.5rem; color: #00796B; margin-bottom: 1.2rem; font-weight: 600;
         border-left: 4px solid #00ACC1; padding-left: 0.8rem;
     }
-
-    /* Content Boxes - General */
+    /* Content Boxes */
     .content-box, .feature-box, .step-box, .purpose-box, .benefit-box, .acknowledgement-box {
-        background: #ffffff; /* White background for content */
-        border-radius: 8px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07);
-        border-left: 5px solid; /* Keep border-left */
+        background: #ffffff; border-radius: 8px; padding: 1.5rem;
+        margin-bottom: 1.5rem; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07);
+        border-left: 5px solid;
     }
-    /* Specific Box Colors */
-    .feature-box { border-left-color: #00ACC1; background-color: #E0F7FA; } /* Cyan Accent, Light Cyan BG */
-    .step-box { border-left-color: #4CAF50; background-color: #E8F5E9; } /* Green Accent, Light Green BG */
-    .purpose-box { border-left-color: #FFB300; background-color: #FFFDE7; } /* Amber Accent, Light Yellow BG */
-    .benefit-box { border-left-color: #1E88E5; background-color: #E3F2FD; } /* Blue Accent, Light Blue BG */
-    .acknowledgement-box { border-left-color: #8E24AA; background-color: #F3E5F5; } /* Purple Accent, Light Purple BG */
-    .content-box { border-left-color: #00796B; background-color: #f8f9fa; } /* Teal Accent, Off-white BG */
-
+    .feature-box { border-left-color: #00ACC1; background-color: #E0F7FA; }
+    .step-box { border-left-color: #4CAF50; background-color: #E8F5E9; }
+    .purpose-box { border-left-color: #FFB300; background-color: #FFFDE7; }
+    .benefit-box { border-left-color: #1E88E5; background-color: #E3F2FD; }
+    .acknowledgement-box { border-left-color: #8E24AA; background-color: #F3E5F5; }
+    .content-box { border-left-color: #00796B; background-color: #f8f9fa; }
     /* About Page Specific */
     .circle-img-container { display: flex; justify-content: center; margin-bottom: 1rem; }
     .circle-img {
-        border-radius: 50%;
-        width: 150px; /* Moderate size */
-        height: 150px;
-        object-fit: cover;
-        border: 7px solid #00796B; /* Teal border */
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        border-radius: 50%; width: 150px; height: 150px; object-fit: cover;
+        border: 7px solid #00796B; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
      }
     .author-name { text-align:center; font-size:1.6rem; font-weight:600; color: #004D40; margin-top: 0.5rem; }
-    .author-title { text-align:center; font-size:1.2rem; color: #555; margin-bottom: 1rem; font-style: italic;} /* Reduced bottom margin */
-    .linkedin-btn { /* Style for specific LinkedIn buttons */
-        display: inline-block;
-        padding: 0.7em 1.5em;
-        border: none;
-        border-radius: 25px;
-        background: linear-gradient(145deg, #0077b5, #005582); /* LinkedIn Blue Gradient */
-        color: white !important;
-        font-weight: bold;
-        text-decoration: none;
-        box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s ease;
-        text-align: center; /* Center text inside button */
+    .author-title { text-align:center; font-size:1.2rem; color: #555; margin-bottom: 1rem; font-style: italic;}
+    .linkedin-btn {
+        display: inline-block; padding: 0.7em 1.5em; border: none; border-radius: 25px;
+        background: linear-gradient(145deg, #0077b5, #005582); color: white !important;
+        font-weight: bold; text-decoration: none; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease; text-align: center;
     }
     .linkedin-btn:hover {
         background: linear-gradient(145deg, #005582, #003350);
-        box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
-        transform: translateY(-2px);
+        box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3); transform: translateY(-2px);
         color: white !important; text-decoration: none;
     }
-
     /* Footer */
     .footer-text { font-size: 0.9rem; color: #6c757d; text-align: center; margin-top: 3rem; padding-bottom: 1rem; font-style: italic; }
-
     /* Dataframe styling */
     .stDataFrame { border: 1px solid #dee2e6; border-radius: 5px; }
-    /* Enhance dataframe header */
-     .stDataFrame thead th { background-color: #E0F2F1; color: #00695C; font-weight: bold; }
-    /* Style Drug-Likeness table generated by markdown */
+    .stDataFrame thead th { background-color: #E0F2F1; color: #00695C; font-weight: bold; }
     table.dataframe { width: 100%; border-collapse: collapse; }
     table.dataframe th { background-color: #E0F2F1; color: #00695C; font-weight: bold; padding: 8px; text-align: left; border-bottom: 2px solid #00796B;}
     table.dataframe td { padding: 8px; border-bottom: 1px solid #dee2e6; }
     table.dataframe tr:nth-child(even) { background-color: #f8f9fa; }
-
-
     /* Expander styling */
     .st-expander { border: 1px solid #B2DFDB; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); margin-bottom: 1rem;}
     .st-expander header { background-color: #E0F2F1; border-radius: 8px 8px 0 0; font-weight: 600; color: #00695C; }
     .st-expander header:hover { background-color: #B2DFDB; }
-
-    /* Ensure text wraps in st.text */
     .stText { white-space: pre-wrap !important; }
-
 </style>
 """, unsafe_allow_html=True)
 
 # --- HEADER & NAVIGATION BAR ---
 st.markdown('<div class="main-title-container"><div class="main-title">🧬 ADMETriX 🧪</div></div>', unsafe_allow_html=True)
-
 cols_nav = st.columns(4)
 with cols_nav[0]:
     if st.button("🏠 Home", key="nav_Home_main", use_container_width=True): update_nav("Home")
@@ -435,342 +391,338 @@ with cols_nav[2]:
     if st.button("🔬 Analysis", key="nav_Analysis_main", use_container_width=True): update_nav("Analysis")
 with cols_nav[3]:
     if st.button("ℹ️ About", key="nav_About_main", use_container_width=True): update_nav("About")
-
 nav_selected = st.session_state.get("nav_selected", "Home")
 st.divider()
 
 # --- PAGE CONTENT ---
 if nav_selected == "Home":
     st.markdown("<div class='page-title'>Welcome to ADMETriX: Your Bioinformatics Drug Nexus</div>", unsafe_allow_html=True)
-    st.markdown("""
-    ADMETriX is your integrated, web-based platform for essential compound analysis.
+    st.markdown("""ADMETriX is your integrated, web-based platform for essential compound analysis.
     Designed for students, researchers, and educators in **structural bioinformatics, drug discovery, and computational biology**.
-    Streamline your ADMET analysis without installations!
-    """)
+    Streamline your ADMET analysis without installations!""")
     st.markdown("<div class='page-subtitle'>🚀 Key Features</div>", unsafe_allow_html=True)
-    st.markdown("""
-    <div class="feature-box">
-    <ul>
+    st.markdown("""<div class="feature-box"><ul>
         <li><b>📊 2D & 3D Visualization</b>: View 2D structures and interactive 3D models instantly.</li>
         <li><b>🧪 Physicochemical Properties</b>: Comprehensive descriptors (MW, TPSA, LogP, etc.).</li>
         <li><b>💊 Drug-likeness Rules</b>: Evaluate against Lipinski, Ghose, Veber, Egan, Muegge rules with icons ✅/❌.</li>
         <li><b>🔗 Similar Compounds Search</b>: Find structurally similar compounds via PubChem with 2D structures.</li>
-        <li><b> pharmacokinetic Predictions</b>: Predict GI absorption & BBB permeation likelihood.</li>
+        <li><b>Pharmacokinetic Predictions</b>: Predict GI absorption & BBB permeation likelihood.</li>
         <li><b>📈 Bioavailability Radar</b>: SwissADME-style radar plots for rapid assessment.</li>
         <li><b>🥚 BOILED-Egg Plot</b>: Visualize GI absorption & BBB permeation for multiple compounds.</li>
         <li><b>🔄 Batch Input & Download</b>: Analyze multiple molecules (SMILES/SDF) & download results.</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    </ul></div>""", unsafe_allow_html=True)
+    if not RDKIT_AVAILABLE:
+        st.warning("⚠️ **Note:** Some advanced features require the RDKit library. If RDKit is not installed, these features will be disabled or limited.")
     st.markdown("<div class='page-subtitle'>💡 Why Use ADMETriX?</div>", unsafe_allow_html=True)
-    st.markdown("""
-    <div class="content-box">
-    <ul>
+    st.markdown("""<div class="content-box"><ul>
         <li>🌐 No installation needed — fully browser-based and accessible anywhere.</li>
         <li>👍 Beginner-friendly, with clear explanations and interactive controls.</li>
         <li>🎓 Educational & Research-Oriented: Designed for learning, teaching, and research.</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    </ul></div>""", unsafe_allow_html=True)
 
 elif nav_selected == "User Guide":
     st.markdown("<div class='page-title'>📖 User Guide</div>", unsafe_allow_html=True)
     st.markdown("Follow these simple steps to analyze your compounds using ADMETriX:")
     st.markdown("""
     <div class="step-box"><b>Step 1: Navigate to Analysis</b><br>Click on the <b>🔬 Analysis</b> tab above.</div>
-    <div class="step-box"><b>Step 2: Select Input Type</b><br>Choose 'SDF' to upload <code>.sdf</code> files or 'SMILES' to paste text or upload <code>.smi</code>/<code>.txt</code> files.</div>
+    <div class="step-box"><b>Step 2: Select Input Type</b><br>Choose 'SDF' to upload <code>.sdf</code> files or 'SMILES' to paste text or upload <code>.smi</code>/<code>.txt</code> files. (These options are RDKit dependent). Alternatively, use the PubChem search within the detailed results of an analyzed molecule.</div>
     <div class="step-box"><b>Step 3: Provide Data</b><br>Use the 'Browse files' button or paste SMILES into the text area (one per line).</div>
     <div class="step-box"><b>Step 4: Start Analysis</b><br>Click the <b>🚀 Start Analysis</b> button.</div>
     <div class="step-box"><b>Step 5: Explore Results</b><br>View the summary table. Select a molecule (if multiple) to see detailed results in expandable sections (including 2D/3D structures, PubChem search, properties, rules, PK predictions, Radar plot, and BOILED-Egg plot).</div>
     <div class="step-box"><b>Step 6: Download Data</b><br>Use the download buttons 📥 for individual results or the 'Download All Results' button at the bottom.</div>
     """, unsafe_allow_html=True)
+    if not RDKIT_AVAILABLE:
+        st.warning("⚠️ **Note on Functionality:** SDF/SMILES input and most detailed analyses (2D/3D structures, properties, rules, plots) require RDKit. If RDKit is not found, these features will be disabled on the Analysis page. A simplified PubChem search will be available instead.")
 
 elif nav_selected == "Analysis":
     st.markdown("<div class='page-title'>🔬 ADMETriX Analysis</div>", unsafe_allow_html=True)
 
     if not RDKIT_AVAILABLE:
-        st.error("🚫 RDKit installation not found. The Analysis tab requires RDKit. Please install it (`conda install -c conda-forge rdkit` or `pip install rdkit-pypi`) and restart the app.")
-    else:
+        st.error(
+            "🚫 **RDKit Library Not Found!** Core cheminformatics functionalities are unavailable. "
+            "This means ADMET analysis features like property calculation, 2D/3D structure generation from SMILES/SDF input, drug-likeness rules, and advanced plots are disabled. "
+            "Please install RDKit (`conda install -c conda-forge rdkit` or `pip install rdkit-pypi`) and restart the app for full functionality. "
+            "A simplified PubChem search is available below."
+        )
+        st.divider()
+        with st.expander("🔗 Find Compounds via PubChem (Limited Mode)", expanded=True):
+            pubchem_search_name_key_no_rdkit = "pubchem_search_name_main_input_no_rdkit"
+            if pubchem_search_name_key_no_rdkit not in st.session_state:
+                st.session_state[pubchem_search_name_key_no_rdkit] = ""
+
+            user_search_name_input_no_rdkit = st.text_input(
+                "Compound name for PubChem search:",
+                value=st.session_state[pubchem_search_name_key_no_rdkit],
+                key=pubchem_search_name_key_no_rdkit,
+                help="Enter a compound name (e.g., Aspirin, Ibuprofen)."
+            )
+            if st.button("Search PubChem 🔎", key="pubchem_search_btn_main_action_no_rdkit"):
+                st.session_state.current_pubchem_search_results = None
+                st.session_state.current_pubchem_main_cid_no_rdkit = None
+                st.session_state.current_pubchem_search_name_no_rdkit = user_search_name_input_no_rdkit
+
+                if user_search_name_input_no_rdkit:
+                    with st.spinner(f"Searching PubChem for '{user_search_name_input_no_rdkit}'..."):
+                        cid = pubchem_get_cid_from_name(user_search_name_input_no_rdkit)
+                        if cid:
+                            st.session_state.current_pubchem_main_cid_no_rdkit = cid
+                            st.success(f"Found CID {cid} for '{user_search_name_input_no_rdkit}'. Fetching details...", icon="✅")
+                            main_compound_info = pubchem_get_compound_info(cid)
+                            if main_compound_info:
+                                st.markdown(f"##### Details for {main_compound_info.get('IUPACName', user_search_name_input_no_rdkit)} (CID: {cid})")
+                                st.markdown(f"   *Formula:* `{main_compound_info.get('MolecularFormula', 'N/A')}`")
+                                st.markdown(f"   *MW:* `{main_compound_info.get('MolecularWeight', 'N/A')}`")
+                                st.markdown(f"   *SMILES:* `{main_compound_info.get('CanonicalSMILES', 'N/A')}`")
+                                st.markdown("---")
+                            # Simplified: No similar compounds search here to keep it distinct from full mode
+                            st.session_state.current_pubchem_search_results = "not_searched_similar_in_no_rdkit_mode"
+                        else: st.session_state.current_pubchem_search_results = "not_found_no_rdkit_mode"
+                else: st.warning("Please enter a compound name for PubChem search.")
+
+            searched_name_display_no_rdkit = st.session_state.get('current_pubchem_search_name_no_rdkit', '')
+            if searched_name_display_no_rdkit:
+                if st.session_state.current_pubchem_search_results == "not_found_no_rdkit_mode":
+                    st.error(f"Compound '{searched_name_display_no_rdkit}' not found in PubChem.")
+    else: # RDKIT IS AVAILABLE
         st.markdown("#### Upload Your Molecules")
         cols_analysis_input = st.columns([1, 2, 1])
         with cols_analysis_input[1]:
             file_type = st.radio("Select Input Type:", ["SDF", "SMILES"], horizontal=True, label_visibility="collapsed", key="analysis_file_type_radio")
-            uploaded_sdf_files = None
-            uploaded_smiles_file = None
-            smiles_input_str = ""
+            uploaded_sdf_files = None; uploaded_smiles_file = None; smiles_input_str = ""
 
             if file_type == "SDF":
                 uploaded_sdf_files = st.file_uploader("Browse SDF files (.sdf)", type=["sdf"], accept_multiple_files=True, key="upload_sdf_widget")
                 if uploaded_sdf_files: st.success(f"{len(uploaded_sdf_files)} SDF file(s) selected.")
             elif file_type == "SMILES":
                 uploaded_smiles_file = st.file_uploader("Browse SMILES file (.smi, .txt)", type=["smi", "txt"], accept_multiple_files=False, key="upload_smiles_file_widget")
-                st.markdown("<p style='text-align: center; margin: 0.5rem 0;'>OR</p>", unsafe_allow_html=True) # Centered OR
+                st.markdown("<p style='text-align: center; margin: 0.5rem 0;'>OR</p>", unsafe_allow_html=True)
                 st.markdown("###### Paste SMILES (one per line):")
                 smiles_input_str = st.text_area("Paste SMILES here...", height=100, placeholder="CCOc1ccc(cc1)NC(=O)C\n...", key="analysis_smiles_input_area", label_visibility="collapsed")
-
                 if uploaded_smiles_file: st.success(f"SMILES file '{uploaded_smiles_file.name}' selected.")
                 elif smiles_input_str: st.success("SMILES pasted in text area.")
 
             if st.button("🚀 Start Analysis", use_container_width=True, type="primary", key="start_analysis_action_button"):
-                # Reset state variables
-                st.session_state.molecule_data_store, st.session_state.analysis_triggered, st.session_state.selected_molecule_index, st.session_state.current_pubchem_search_results = [], False, 0, None
+                st.session_state.molecule_data_store, st.session_state.analysis_triggered = [], False
+                st.session_state.selected_molecule_index, st.session_state.current_pubchem_search_results = 0, None
                 mols_to_process, mol_names, error_messages = [], [], []
                 input_provided = False
 
-                # --- Input Processing Logic ---
                 if file_type == "SDF" and uploaded_sdf_files:
-                    st.session_state.input_type = "SDF"; input_provided = True
+                    input_provided = True
                     for i, uploaded_file in enumerate(uploaded_sdf_files):
-                        try: mol = get_mol_from_sdf_string(uploaded_file.getvalue().decode("utf-8", errors='ignore'));
-                        except Exception as e: error_messages.append(f"Error processing SDF {uploaded_file.name}: {e}"); mol=None
-                        if mol: mols_to_process.append(mol); name_from_sdf = mol.GetProp("_Name") if mol.HasProp("_Name") else uploaded_file.name.split('.')[0]; mol_names.append(name_from_sdf + f"_sdf_{i+1}")
-                        elif uploaded_file: error_messages.append(f"Could not parse molecule from SDF: {uploaded_file.name}")
+                        try: content = uploaded_file.getvalue().decode("utf-8", errors='ignore')
+                        except Exception as e: error_messages.append(f"Error reading SDF {uploaded_file.name}: {e}"); continue
+                        mol = get_mol_from_sdf_string(content)
+                        if mol:
+                            mols_to_process.append(mol)
+                            name = mol.GetProp("_Name") if mol.HasProp("_Name") else uploaded_file.name.split('.')[0]
+                            mol_names.append(name + f"_sdf_{i+1}")
+                        else: error_messages.append(f"Could not parse molecule from SDF: {uploaded_file.name}")
                 elif file_type == "SMILES":
                     smiles_list = []
                     if uploaded_smiles_file:
-                        st.session_state.input_type = "SMILES_File"; input_provided = True
-                        try: smiles_content = uploaded_smiles_file.getvalue().decode("utf-8", errors='ignore')
-                        except Exception as e: error_messages.append(f"Error reading SMILES file {uploaded_smiles_file.name}: {e}"); smiles_content = ""
-                        smiles_list = [s.strip() for s in smiles_content.strip().split('\n') if s.strip()]
-                        if not smiles_list and not error_messages: error_messages.append(f"SMILES file '{uploaded_smiles_file.name}' appears empty or invalid.")
+                        input_provided = True
+                        try: content = uploaded_smiles_file.getvalue().decode("utf-8", errors='ignore')
+                        except Exception as e: error_messages.append(f"Error reading SMILES file: {e}"); content=""
+                        smiles_list = [s.strip() for s in content.strip().split('\n') if s.strip()]
+                        if not smiles_list and not error_messages: error_messages.append(f"SMILES file '{uploaded_smiles_file.name}' is empty or invalid.")
                     elif smiles_input_str.strip():
-                        st.session_state.input_type = "SMILES_Text"; input_provided = True
+                        input_provided = True
                         smiles_list = [s.strip() for s in smiles_input_str.strip().split('\n') if s.strip()]
                     else: input_provided = False
+
                     for i, smi in enumerate(smiles_list):
                         mol = get_mol_from_smiles(smi)
-                        if mol: mols_to_process.append(mol); mol_names.append(f"SMILES_{i+1}" + (f" ({smi[:15]}...)" if len(smi)>15 else f" ({smi})") )
+                        if mol:
+                            mols_to_process.append(mol)
+                            mol_names.append(f"SMILES_{i+1}" + (f" ({smi[:15]}...)" if len(smi)>15 else f" ({smi})"))
                         else: error_messages.append(f"Could not parse SMILES: {smi}")
+
                 if error_messages: st.warning('\n'.join(error_messages))
                 if mols_to_process:
                     with st.spinner("⚙️ Analyzing molecules..."):
-                        # --- Analysis Loop ---
                         for i, mol_obj in enumerate(mols_to_process):
-                            mol_data = {"name": mol_names[i], "mol_obj_rdkit": mol_obj};
-                            mol_data["physchem"] = calculate_physicochemical_properties(mol_obj);
-                            mol_data["drug_likeness"] = check_drug_likeness_rules(mol_data["physchem"]);
-                            mol_data["pharmacokinetics"] = predict_pharmacokinetics(mol_data["physchem"]);
-                            mol_data["radar_params"] = get_bioavailability_radar_data(mol_data["physchem"]);
-                            mol_data["2d_image_bytes"] = generate_2d_image(mol_obj);
-                            mol_data["xyz_str"] = get_xyz_from_mol(mol_obj);
+                            mol_data = {"name": mol_names[i], "mol_obj_rdkit": mol_obj}
+                            mol_data["physchem"] = calculate_physicochemical_properties(mol_obj)
+                            mol_data["drug_likeness"] = check_drug_likeness_rules(mol_data["physchem"])
+                            mol_data["pharmacokinetics"] = predict_pharmacokinetics(mol_data["physchem"])
+                            mol_data["radar_params"] = get_bioavailability_radar_data(mol_data["physchem"])
+                            mol_data["2d_image_bytes"] = generate_2d_image(mol_obj)
+                            mol_data["xyz_str"] = get_xyz_from_mol(mol_obj) # 3D data generation
                             st.session_state.molecule_data_store.append(mol_data)
-                    st.session_state.analysis_triggered = True; st.success(f"✅ Analysis complete for {len(st.session_state.molecule_data_store)} molecule(s).")
-                elif not input_provided and not error_messages: st.warning("⚠️ No valid input provided. Please upload/paste data.")
-                elif not mols_to_process and input_provided: st.error("❌ No valid molecules could be processed from the input.")
+                    st.session_state.analysis_triggered = True
+                    st.success(f"✅ Analysis complete for {len(st.session_state.molecule_data_store)} molecule(s).")
+                elif not input_provided and not error_messages: st.warning("⚠️ No valid input provided.")
+                elif not mols_to_process and input_provided : st.error("❌ No valid molecules processed from input.")
         st.divider()
 
-        # --- Results Display Area ---
         if st.session_state.get("analysis_triggered", False) and st.session_state.molecule_data_store:
             st.markdown("<div class='page-subtitle'>📊 Analysis Results Overview</div>", unsafe_allow_html=True)
-            summary_data_list = []
-            for idx, data in enumerate(st.session_state.molecule_data_store):
-                lipinski_status = data["drug_likeness"].get("Lipinski's Rule of Five", "N/A")
-                lip_viol = "N/A"
-                if isinstance(lipinski_status, str) and "Fail" in lipinski_status:
-                    try: lip_viol = lipinski_status.split('(')[1].split(' ')[0]
-                    except: lip_viol = "err"
-                elif isinstance(lipinski_status, str) and "Passed" in lipinski_status: lip_viol = "0"
-                elif data["drug_likeness"].get("Error"): lip_viol = "Err"
-                summary_data_list.append({ "ID": idx + 1, "Name": data["name"], "MW": data["physchem"].get("Molecular Weight (MW)", "N/A"), "LogP": data["physchem"].get("LogP (Crippen)", "N/A"), "TPSA": data["physchem"].get("Topological Polar Surface Area (TPSA)", "N/A"), "Lipinski Viol.": lip_viol })
-            st.dataframe(pd.DataFrame(summary_data_list), use_container_width=True, hide_index=True)
+            summary_df = pd.DataFrame([{
+                "ID": idx + 1, "Name": data["name"],
+                "MW": data["physchem"].get("Molecular Weight (MW)", "N/A"),
+                "LogP": data["physchem"].get("LogP (Crippen)", "N/A"),
+                "TPSA": data["physchem"].get("Topological Polar Surface Area (TPSA)", "N/A"),
+                "Lipinski Viol.": (lambda d: "N/A" if d.get("Error") else (lambda s: "0" if "Passed" in s else (s.split('(')[1].split(' ')[0] if "Fail" in s else "err"))(d.get("Lipinski's Rule of Five","N/A")))(data["drug_likeness"])
+            } for idx, data in enumerate(st.session_state.molecule_data_store)])
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
             mol_display_names = [f"{idx+1}. {data['name']}" for idx, data in enumerate(st.session_state.molecule_data_store)]
-            if len(mol_display_names) > 1 :
-                 selected_mol_display_name = st.selectbox("Select molecule for detailed results:", mol_display_names, index=st.session_state.selected_molecule_index, key="molecule_selector_dropdown", on_change=lambda: setattr(st.session_state, 'current_pubchem_search_results', None))
-                 st.session_state.selected_molecule_index = mol_display_names.index(selected_mol_display_name)
+            if len(mol_display_names) > 1:
+                 selected_name = st.selectbox("Select molecule for detailed results:", mol_display_names,
+                                              index=st.session_state.selected_molecule_index,
+                                              key="molecule_selector_dropdown",
+                                              on_change=lambda: setattr(st.session_state, 'current_pubchem_search_results', None))
+                 st.session_state.selected_molecule_index = mol_display_names.index(selected_name)
 
             current_mol_data = st.session_state.molecule_data_store[st.session_state.selected_molecule_index]
             mol_name_display = current_mol_data["name"]
             st.markdown(f"#### Detailed Results for: **{mol_name_display}**")
 
-            # --- Result Expanders ---
             with st.expander("🖼️ Molecular Structure (2D/3D)", expanded=True):
-                col1_struct, col2_struct = st.columns(2)
-                with col1_struct:
+                col1, col2 = st.columns(2)
+                with col1:
                     st.subheader("2D Structure")
                     if current_mol_data["2d_image_bytes"]:
                         st.image(current_mol_data["2d_image_bytes"])
-                        st.download_button(label="Download 2D Image", data=current_mol_data["2d_image_bytes"], file_name=f"{mol_name_display.replace(' ','_').replace('/','_')}_2D.png", mime="image/png", key=f"download_2d_btn_{st.session_state.selected_molecule_index}")
+                        st.download_button("Download 2D Image", current_mol_data["2d_image_bytes"], f"{mol_name_display.replace(' ','_')}_2D.png", "image/png", key=f"dl_2d_{st.session_state.selected_molecule_index}")
                     else: st.error("Could not generate 2D image.")
-                with col2_struct:
+                with col2: # 3D Structure Display
                     st.subheader("3D Structure")
-    if STMOL_AVAILABLE:
-        
-        if current_mol_data["xyz_str"]:
-            
-            
-       
-        view = py3Dmol.view(width=350, height=350)
-       
-        view.addModel(current_mol_data["xyz_str"], 'xyz')
-       
-        view.setStyle({'stick': {}})
-        
-        showmol(view, height=350, width=350, key=f"stmol_viewer_{st.session_state.selected_molecule_index}")
-    else:
-        st.warning("Could not generate 3D structure data (XYZ).")
-        st.warning("Could not generate 3D structure data (XYZ).")
-      
-
+                    if STMOL_AVAILABLE:
+                        if current_mol_data["xyz_str"]:
+                            showmol(current_mol_data["xyz_str"], style='stick', height=350, width=350, key=f"stmol_{st.session_state.selected_molecule_index}")
+                        else: st.warning("Could not generate 3D structure data (XYZ).")
+                    else: st.warning("⚠️ `stmol` library not installed. Cannot display 3D structures.")
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
-                st.write(f"Search PubChem for compounds similar to: **{mol_name_display}**")
-                default_search_name = clean_molecule_name_for_pubchem(current_mol_data["name"])
-                pubchem_search_name_key = f"pubchem_search_name_{st.session_state.selected_molecule_index}"
-                if pubchem_search_name_key not in st.session_state or st.session_state.get(pubchem_search_name_key, '') != default_search_name:
-                    st.session_state[pubchem_search_name_key] = default_search_name
-                user_search_name = st.text_input("Compound name for PubChem search:", value=st.session_state.get(pubchem_search_name_key, default_search_name), key=pubchem_search_name_key, help="Edit name if needed.")
+                default_name = clean_molecule_name_for_pubchem(current_mol_data["name"])
+                search_key = f"pubchem_search_expander_{st.session_state.selected_molecule_index}"
+                # Use default_name as the initial value if the key is not in session_state
+                user_search_name = st.text_input("Compound name for PubChem search:", value=st.session_state.get(search_key, default_name), key=search_key, help="Edit name if needed.")
 
-                # Use standard button style for search
-                if st.button("Search PubChem 🔎", key=f"pubchem_search_btn_{st.session_state.selected_molecule_index}"):
-                    st.session_state.current_pubchem_search_results = None
-                    if user_search_name:
-                        with st.spinner(f"Searching PubChem for '{user_search_name}'..."):
-                            cid = pubchem_get_cid_from_name(user_search_name)
+                if st.button("Search PubChem 🔎", key=f"btn_pubchem_expander_{st.session_state.selected_molecule_index}"):
+                    st.session_state.current_pubchem_search_results = None # Reset
+                    actual_search_name = st.session_state[search_key] # Get current value from text_input via its key
+                    if actual_search_name:
+                        with st.spinner(f"Searching PubChem for '{actual_search_name}'..."):
+                            cid = pubchem_get_cid_from_name(actual_search_name)
                             if cid:
                                 st.success(f"Found CID {cid}. Fetching similar compounds...", icon="✅")
-                                similar_cids = pubchem_get_similar_compounds(cid, threshold=90, max_results=5)
+                                similar_cids = pubchem_get_similar_compounds(cid)
                                 if similar_cids:
-                                    similar_compound_data = []
-                                    with st.spinner("Fetching details for similar compounds..."):
-                                        for scid in similar_cids:
-                                            info = pubchem_get_compound_info(scid)
-                                            img_bytes = None
-                                            if RDKIT_AVAILABLE and info.get("CanonicalSMILES"):
-                                                mol_sim = get_mol_from_smiles(info["CanonicalSMILES"])
-                                                img_bytes = generate_2d_image(mol_sim, size=(200, 200))
-                                            similar_compound_data.append({"cid": scid, "info": info, "image": img_bytes})
-                                    st.session_state.current_pubchem_search_results = similar_compound_data
+                                    data_list = []
+                                    for scid in similar_cids:
+                                        info = pubchem_get_compound_info(scid)
+                                        img_bytes = None
+                                        if RDKIT_AVAILABLE and info.get("CanonicalSMILES"):
+                                            mol_sim = get_mol_from_smiles(info["CanonicalSMILES"])
+                                            if mol_sim: img_bytes = generate_2d_image(mol_sim, (200,200))
+                                        data_list.append({"cid": scid, "info": info, "image": img_bytes})
+                                    st.session_state.current_pubchem_search_results = data_list
                                 else: st.session_state.current_pubchem_search_results = "no_similar"
                             else: st.session_state.current_pubchem_search_results = "not_found"
-                    else: st.warning("Please enter a compound name for PubChem search.")
+                    else: st.warning("Please enter a compound name.")
 
-                current_search_name_for_display = st.session_state.get(pubchem_search_name_key, default_search_name)
-                if st.session_state.current_pubchem_search_results == "not_found": st.error(f"Compound '{current_search_name_for_display}' not found in PubChem.")
-                elif st.session_state.current_pubchem_search_results == "no_similar": st.warning(f"No similar compounds found with >90% similarity for '{current_search_name_for_display}'.")
+                display_search_name = st.session_state.get(search_key, default_name)
+                if st.session_state.current_pubchem_search_results == "not_found": st.error(f"'{display_search_name}' not found.")
+                elif st.session_state.current_pubchem_search_results == "no_similar": st.warning(f"No similar compounds found for '{display_search_name}'.")
                 elif isinstance(st.session_state.current_pubchem_search_results, list):
-                    st.markdown(f"##### Top Similar Compounds (>90% similarity to '{current_search_name_for_display}')")
-                    results_list = st.session_state.current_pubchem_search_results
-                    for i, item in enumerate(results_list):
-                        info, img_bytes = item["info"], item["image"]
-                        col_info, col_img = st.columns([3,2])
-                        with col_info:
-                            st.markdown(f"**{i+1}. Compound CID: {item['cid']}**")
-                            st.markdown(f"   *Name:* {info.get('IUPACName', 'N/A')}")
-                            st.markdown(f"   *Formula:* {info.get('MolecularFormula', 'N/A')}")
-                            st.markdown(f"   *MW:* {info.get('MolecularWeight', 'N/A')}")
-                            st.markdown(f"   *SMILES:* `{info.get('CanonicalSMILES', 'N/A')}`")
-                        with col_img:
-                             if img_bytes: st.image(img_bytes, width=200)
-                             else: st.caption("No 2D Image")
-                        if i < len(results_list) - 1: st.markdown("---")
+                    st.markdown(f"##### Top Similar Compounds to '{display_search_name}'")
+                    for i, item in enumerate(st.session_state.current_pubchem_search_results):
+                        c1,c2 = st.columns([3,2])
+                        with c1:
+                            st.markdown(f"**{i+1}. CID: {item['cid']}**")
+                            st.markdown(f"   *Name:* {item['info'].get('IUPACName', 'N/A')}")
+                            st.markdown(f"   *Formula:* {item['info'].get('MolecularFormula', 'N/A')}")
+                            st.markdown(f"   *MW:* {item['info'].get('MolecularWeight', 'N/A')}")
+                            st.markdown(f"   *SMILES:* `{item['info'].get('CanonicalSMILES', 'N/A')}`")
+                        with c2:
+                            if item['image']: st.image(item['image'], width=200)
+                            else: st.caption("No 2D Image")
+                        if i < len(st.session_state.current_pubchem_search_results) -1 : st.markdown("---")
 
-            # Helper function for displaying tables with icons
-            def display_results_table(title, data_dict, df_key_suffix, error_message="Data could not be processed."):
+            def display_results_table(title, data_dict, df_key_suffix, error_msg="Data could not be processed."):
                 st.subheader(title)
                 if data_dict and not data_dict.get("Error") and not data_dict.get("Error_PropertyCalculation"):
-                    is_drug_likeness = title == "Drug-likeness Rules"
-                    df_data = []
-                    for prop, value in data_dict.items():
-                         if "Error" not in prop:
-                            df_data.append({"Property": prop, "Value": value})
+                    df_data = [{"Property": p, "Value": v} for p, v in data_dict.items() if "Error" not in p]
                     if df_data:
                         df = pd.DataFrame(df_data)
-                        if is_drug_likeness:
-                            # Use st.markdown to render HTML table for icons
-                            html_table = df.to_html(escape=False, index=False, classes=["dataframe"], border=0)
-                            st.markdown(html_table, unsafe_allow_html=True)
-                            # Prepare CSV without icons
-                            df_download = df.copy()
-                            df_download['Value'] = df_download['Value'].astype(str).str.replace(' ✅','', regex=False).str.replace(' ❌','', regex=False)
-                            csv_data = df_download.to_csv(index=False).encode('utf-8')
+                        if title == "Drug-likeness Rules":
+                            html = df.to_html(escape=False, index=False, classes=["dataframe"], border=0)
+                            st.markdown(html, unsafe_allow_html=True)
+                            df_dl = df.copy(); df_dl['Value'] = df_dl['Value'].astype(str).replace({' ✅':'', ' ❌':''}, regex=True)
+                            csv_data = df_dl.to_csv(index=False).encode('utf-8')
                         else:
                             st.dataframe(df, use_container_width=True, hide_index=True)
                             csv_data = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label=f"Download {title} CSV", data=csv_data, file_name=f'{mol_name_display.replace(" ","_").replace("/","_")}_{df_key_suffix}.csv', mime='text/csv', key=f"download_{df_key_suffix}_btn_{st.session_state.selected_molecule_index}")
+                        st.download_button(f"Download {title} CSV", csv_data, f"{mol_name_display.replace(' ','_')}_{df_key_suffix}.csv", "text/csv", key=f"dl_{df_key_suffix}_{st.session_state.selected_molecule_index}")
                         if title == "Properties": st.markdown("<small><b>Note:</b> ESOL Solubility (LogS) is a placeholder.</small>", unsafe_allow_html=True)
                     else: st.warning("No valid data to display.")
-                elif data_dict and data_dict.get("Error"): st.error(data_dict.get("Error"))
-                elif data_dict and data_dict.get("Error_PropertyCalculation"): st.error(data_dict.get("Error_PropertyCalculation"))
-                else : st.error(error_message)
+                elif data_dict and (data_dict.get("Error") or data_dict.get("Error_PropertyCalculation")):
+                    st.error(data_dict.get("Error", data_dict.get("Error_PropertyCalculation")))
+                else: st.error(error_msg)
 
-            with st.expander("🧪 Physicochemical Properties", expanded=False): display_results_table("Properties", current_mol_data["physchem"], "physchem", "Physicochemical properties failed or pending.")
-            with st.expander("💊 Drug-likeness Rules", expanded=False): display_results_table("Drug-likeness Rules", current_mol_data["drug_likeness"], "druglikeness", "Drug-likeness rules evaluation failed or pending.")
-            with st.expander("💉 Pharmacokinetics Predictions", expanded=False): display_results_table("PK Predictions", current_mol_data["pharmacokinetics"], "pk", "Pharmacokinetic predictions failed or pending.")
+            with st.expander("🧪 Physicochemical Properties", expanded=False): display_results_table("Properties", current_mol_data["physchem"], "physchem")
+            with st.expander("💊 Drug-likeness Rules", expanded=False): display_results_table("Drug-likeness Rules", current_mol_data["drug_likeness"], "druglikeness")
+            with st.expander("💉 Pharmacokinetics Predictions", expanded=False): display_results_table("PK Predictions", current_mol_data["pharmacokinetics"], "pk")
 
             with st.expander("📈 Bioavailability Radar", expanded=False):
                 st.subheader("Bioavailability Radar Plot")
-                radar_plot_bytes = None
-                if current_mol_data["radar_params"]: radar_plot_bytes = plot_bioavailability_radar(current_mol_data["radar_params"], mol_name_display)
-                if radar_plot_bytes:
-                     st.image(radar_plot_bytes);
-                     st.download_button(label="Download Radar Plot", data=radar_plot_bytes, file_name=f"{mol_name_display.replace(' ','_').replace('/','_')}_radar.png", mime="image/png", key=f"download_radar_btn_{st.session_state.selected_molecule_index}")
-                     st.info("""**Interpretation:** The Bioavailability Radar visualizes drug-likeness based on six properties. The blue area is the molecule's profile; the yellow dashed line approximates the ideal space (LogP: -0.7 to +5.0, MW: 150-500, TPSA: 20-130, etc., normalized). Points near the edge (1.0) are generally better. Deviations suggest potential bioavailability issues.""")
-                else: st.error("Could not generate Bioavailability Radar plot (check data).")
+                radar_bytes = plot_bioavailability_radar(current_mol_data["radar_params"], mol_name_display) if current_mol_data["radar_params"] else None
+                if radar_bytes:
+                    st.image(radar_bytes)
+                    st.download_button("Download Radar Plot", radar_bytes, f"{mol_name_display.replace(' ','_')}_radar.png", "image/png", key=f"dl_radar_{st.session_state.selected_molecule_index}")
+                    st.info("""**Interpretation:** Visualizes drug-likeness. Blue area = molecule's profile; yellow dashed line = approx. ideal space. Points near edge (1.0) are generally better.""")
+                else: st.error("Could not generate Bioavailability Radar plot.")
 
             with st.expander("🥚 BOILED-Egg Plot", expanded=False):
                  st.subheader("BOILED-Egg Plot (All Molecules)")
-                 boiled_egg_data = calculate_boiled_egg_data(st.session_state.molecule_data_store)
-                 if boiled_egg_data:
-                     boiled_egg_plot_bytes = plot_boiled_egg(boiled_egg_data)
-                     if boiled_egg_plot_bytes:
-                         st.image(boiled_egg_plot_bytes)
-                         st.download_button(label="Download BOILED-Egg Plot", data=boiled_egg_plot_bytes, file_name="ADMETriX_BOILED_Egg.png", mime="image/png", key="download_boiled_egg_plot")
-                         st.info("""**Interpretation:** Predicts GI absorption (HIA) and BBB permeation. **Yellow Yolk:** High HIA probability. **Light Blue White:** High BBB permeation probability. **Violet Overlap:** High probability for both. **Grey:** Low probability for both. Each red dot is a molecule. (WLOGP approximated using LogP).""")
-                     else: st.error("Could not generate BOILED-Egg plot.")
-                 else: st.warning("No valid data available for BOILED-Egg plot (requires multiple molecules with valid LogP and TPSA).")
+                 boiled_data = calculate_boiled_egg_data(st.session_state.molecule_data_store)
+                 if boiled_data:
+                     plot_bytes = plot_boiled_egg(boiled_data)
+                     if plot_bytes:
+                         st.image(plot_bytes)
+                         st.download_button("Download BOILED-Egg Plot", plot_bytes, "ADMETriX_BOILED_Egg.png", "image/png", key="dl_boiledegg")
+                         st.info("""**Interpretation:** Predicts GI absorption (HIA) and BBB permeation. Yellow=HIA, Blue=BBB, Violet=Both. Red dots = molecules.""")
+                     else: st.error("Could not generate BOILED-Egg plot image.")
+                 else: st.warning("No valid data for BOILED-Egg plot.")
 
             st.divider()
-            all_results_data_list = []
-            for data_item_all in st.session_state.molecule_data_store:
-                flat_data_item = {"Molecule_Name": data_item_all["name"]}
-                if data_item_all.get("physchem"): flat_data_item.update({f"PhysChem_{k.replace(' ','_')}": v for k,v in data_item_all["physchem"].items() if "Error" not in k})
-                if data_item_all.get("drug_likeness"): flat_data_item.update({f"DrugLike_{k.replace(' ','_')}": v for k,v in data_item_all["drug_likeness"].items() if "Error" not in k})
-                if data_item_all.get("pharmacokinetics"): flat_data_item.update({f"PK_{k.replace(' ','_')}": v for k,v in data_item_all["pharmacokinetics"].items() if "Error" not in k})
-                if data_item_all.get("radar_params"): flat_data_item.update({f"Radar_{k.replace(' ','_')}": v for k,v in data_item_all["radar_params"].items() if "Error" not in k})
-                all_results_data_list.append(flat_data_item)
-
-            if all_results_data_list:
-                 try:
-                     df_all_results = pd.DataFrame(all_results_data_list)
-                     st.download_button(label="📥 Download All Results as CSV", data=df_all_results.to_csv(index=False).encode('utf-8'), file_name="ADMETrix_all_results.csv", mime="text/csv", key="download_all_results_action_button", use_container_width=True, type="primary")
-                 except Exception as e:
-                     st.error(f"Error preparing 'Download All Results' CSV: {e}")
-
-
-        elif nav_selected == "Analysis": st.info("☝️ Please upload your molecular data and click 'Start Analysis' to view results.")
+            all_results = []
+            for item in st.session_state.molecule_data_store:
+                flat = {"Molecule_Name": item["name"]}
+                if item.get("physchem"): flat.update({f"PhysChem_{k.replace(' ','_')}": v for k,v in item["physchem"].items() if "Error" not in k})
+                if item.get("drug_likeness"): flat.update({f"DrugLike_{k.replace(' ','_')}": v for k,v in item["drug_likeness"].items() if "Error" not in k})
+                if item.get("pharmacokinetics"): flat_update({f"PK_{k.replace(' ','_')}": v for k,v in item["pharmacokinetics"].items() if "Error" not in k}) # Typo: flat_update -> flat.update
+                if item.get("radar_params"): flat.update({f"Radar_{k.replace(' ','_')}": v for k,v in item["radar_params"].items() if "Error" not in k})
+                all_results.append(flat)
+            if all_results:
+                try:
+                    df_all = pd.DataFrame(all_results)
+                    st.download_button("📥 Download All Results as CSV", df_all.to_csv(index=False).encode('utf-8'), "ADMETrix_all_results.csv", "text/csv", key="dl_all_csv", use_container_width=True, type="primary")
+                except Exception as e: st.error(f"Error preparing 'Download All Results' CSV: {e}")
+        elif nav_selected == "Analysis": # RDKit available, but no analysis triggered
+            st.info("☝️ Please upload molecular data and click 'Start Analysis'.")
 
 
 elif nav_selected == "About":
-    st.markdown("<div class='page-title'>ℹ️ ADMETriX and The Idea Behind It!</div>", unsafe_allow_html=True);
-
-    # Display image and author info centrally
-    st.markdown("""<div class="circle-img-container"><img src="https://media.licdn.com/dms/image/v2/D4D03AQG40jMywf_Vrg/profile-displayphoto-shrink_800_800/B4DZW9E1mDH4Ac-/0/1742633921321?e=1752105600&v=beta&t=KtKUnuLZf_1CfHp3y2YVY0x9UwKplrbanEiq5MFbncU " alt="Sonali Lakhamade" class="circle-img"/></div>""", unsafe_allow_html=True) # Corrected image URL if needed
+    st.markdown("<div class='page-title'>ℹ️ ADMETriX and The Idea Behind It!</div>", unsafe_allow_html=True)
+    st.markdown("""<div class="circle-img-container"><img src="https://media.licdn.com/dms/image/v2/D4D03AQG40jMywf_Vrg/profile-displayphoto-shrink_800_800/B4DZW9E1mDH4Ac-/0/1742633921321?e=1752105600&v=beta&t=KtKUnuLZf_1CfHp3y2YVY0x9UwKplrbanEiq5MFbncU" alt="Sonali Lakhamade" class="circle-img"/></div>""", unsafe_allow_html=True)
     st.markdown('<div class="author-name">Sonali Lakhamade</div>', unsafe_allow_html=True)
     st.markdown('<div class="author-title">Author & Developer</div>', unsafe_allow_html=True)
-    # Centered LinkedIn button below author info
     st.markdown('<div style="text-align: center; margin-bottom: 2rem;"><a href="https://linkedin.com/in/sonali-lakhamade-b6a83230a" target="_blank" class="linkedin-btn">Connect with Sonali on LinkedIn</a></div>', unsafe_allow_html=True)
-
-    # Main description text
-    st.markdown("""
-    <div class="content-box">
-    ADMETriX was developed as part of my Master's degree in Bioinformatics at DES Pune University, with the goal of providing a user-friendly platform for the bioinformatics community.<br><br>
-    The author holds a strong interest in the areas of structural bioinformatics, genomic data analysis, and computational biology tools development.<br><br>
-    This project marks an initial step toward developing more advanced, feature-rich bioinformatics applications in the future.<br><br>
-    The web server will continue to be enhanced with additional tools, improved UI, and expanded compound analysis features based on user feedback and technological trends.
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown("""<div class="content-box">ADMETriX was developed as part of my Master's degree in Bioinformatics at DES Pune University...</div>""", unsafe_allow_html=True)
+    if not RDKIT_AVAILABLE:
+        st.warning("⚠️ **Note:** This application is currently running with limited functionality as the RDKit library is not detected. Full features will be available once RDKit is installed and accessible.")
     st.divider()
-
-    # Rest of the About sections
-    st.markdown("<div class='page-subtitle'>🎯 Purpose</div>", unsafe_allow_html=True); st.markdown("""<div class="purpose-box"><ul><li>Enable rapid, browser-based compound analysis, focusing on ADMET properties.</li><li>Support students and researchers in drug discovery, medicinal chemistry, and computational toxicology.</li><li>Provide an educational tool for understanding key concepts in cheminformatics and ADME profiling.</li><li>Allow batch analysis, interactive visualization, and easy data export.</li></ul></div>""", unsafe_allow_html=True)
-    st.markdown("<div class='page-subtitle'>✨ Key Highlights</div>", unsafe_allow_html=True); st.markdown("""<div class="feature-box"><ul><li>Comprehensive ADMET profiling: 2D/3D visualization, properties, rules, PK predictions.</li><li>User-friendly interface suitable for all levels.</li><li>Batch processing capability.</li><li>Downloadable outputs (PNG, CSV).</li><li>Interactive plots (Radar, BOILED-Egg) and PubChem Similarity Search.</li></ul></div>""", unsafe_allow_html=True)
+    st.markdown("<div class='page-subtitle'>🎯 Purpose</div>", unsafe_allow_html=True); st.markdown("""<div class="purpose-box"><ul><li>Enable rapid, browser-based compound analysis...</li></ul></div>""", unsafe_allow_html=True)
+    st.markdown("<div class='page-subtitle'>✨ Key Highlights</div>", unsafe_allow_html=True); st.markdown("""<div class="feature-box"><ul><li>Comprehensive ADMET profiling...</li></ul></div>""", unsafe_allow_html=True)
     st.markdown("<div class='page-subtitle'>🛠️ Tools and Technologies</div>", unsafe_allow_html=True); st.markdown("""<div class="content-box">Built with: Python, Streamlit, RDKit, Pandas, NumPy, Matplotlib, Requests, stmol.</div>""", unsafe_allow_html=True)
-    st.markdown("<div class='page-subtitle'>🌟 Benefits</div>", unsafe_allow_html=True); st.markdown("""<div class="benefit-box"><ul><li>Accessibility: No installation needed.</li><li>Ease of Use: Intuitive design.</li><li>Educational Value: Helps understand ADMET/cheminformatics.</li><li>Research Support: Facilitates screening & hypothesis generation.</li><li>Time-Saving: Automates routine calculations.</li><li>Cost-Effective: Free, open-source based.</li></ul></div>""", unsafe_allow_html=True)
-    st.markdown("<div class='page-subtitle'>🔮 Planned Future Enhancements</div>", unsafe_allow_html=True); st.markdown("""<div class="feature-box"><ul><li>Medicinal Chemistry filters (PAINS, Brenk).</li><li>Robust ESOL calculation.</li><li>Advanced ML-based predictions.</li><li>Enhanced PubChem integration.</li><li>User accounts & workflow customization.</li></ul></div>""", unsafe_allow_html=True)
-    st.markdown("<div class='page-subtitle'>🙏 Mentorship & Acknowledgement</div>", unsafe_allow_html=True); st.markdown("""<div class="acknowledgement-box">I extend my sincere gratitude to <b>Dr. Kushagra Kashyap</b>, Assistant Professor in Bioinformatics, School of Science and Mathematics, DES Pune University for his invaluable guidance and academic support throughout this project. His expertise and mentorship played a pivotal role in shaping the project's scientific direction.<br><br>His encouragement and expert insights were instrumental in refining the technical implementation and ensuring the project's successful completion. I'm grateful for his contributions to this project.<br><br><a href="https://www.linkedin.com/in/dr-kushagra-kashyap-b230a3bb?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank" class="linkedin-btn">Connect with Dr. Kashyap on LinkedIn</a></div>""", unsafe_allow_html=True)
-    st.markdown("<div class='page-subtitle'>📧 Feedback & Contact</div>", unsafe_allow_html=True); st.markdown("""<div class="content-box">Your feedback is highly appreciated!...<ul><li><b>Email:</b> <a href="mailto:sonaalee21@gmail.com">sonaalee21@gmail.com</a></li><li><b>LinkedIn:</b> <a href="https://www.linkedin.com/in/sonali-lakhamade-b6a83230a?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank">Sonali Lakhamade</a></li></ul></div>""", unsafe_allow_html=True) # Corrected this line
+    st.markdown("<div class='page-subtitle'>🌟 Benefits</div>", unsafe_allow_html=True); st.markdown("""<div class="benefit-box"><ul><li>Accessibility: No installation needed...</li></ul></div>""", unsafe_allow_html=True)
+    st.markdown("<div class='page-subtitle'>🔮 Planned Future Enhancements</div>", unsafe_allow_html=True); st.markdown("""<div class="feature-box"><ul><li>Medicinal Chemistry filters...</li></ul></div>""", unsafe_allow_html=True)
+    st.markdown("<div class='page-subtitle'>🙏 Mentorship & Acknowledgement</div>", unsafe_allow_html=True); st.markdown("""<div class="acknowledgement-box">I extend my sincere gratitude to <b>Dr. Kushagra Kashyap</b>...<br><br><a href="https://www.linkedin.com/in/dr-kushagra-kashyap-b230a3bb?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank" class="linkedin-btn">Connect with Dr. Kashyap on LinkedIn</a></div>""", unsafe_allow_html=True)
+    st.markdown("<div class='page-subtitle'>📧 Feedback & Contact</div>", unsafe_allow_html=True); st.markdown("""<div class="content-box">Your feedback is highly appreciated!...<ul><li><b>Email:</b> <a href="mailto:sonaalee21@gmail.com">sonaalee21@gmail.com</a></li><li><b>LinkedIn:</b> <a href="https://www.linkedin.com/in/sonali-lakhamade-b6a83230a?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank">Sonali Lakhamade</a></li></ul></div>""", unsafe_allow_html=True)
 
 # --- FOOTER ---
 st.divider()
