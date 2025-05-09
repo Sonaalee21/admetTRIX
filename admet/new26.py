@@ -599,7 +599,7 @@ elif nav_selected == "Analysis":
                 
                 if current_mol_data["xyz_str"]:
                     
-                    xyzview = py3Dmol.view(width=800, height=500)
+                    xyzview = py3Dmol.view(width=500, height=300)
                     xyzview.addModel(current_mol_data["xyz_str"], "xyz")  # use "pdb" if appropriate
                     xyzview.setStyle({'cartoon': {'color': 'spectrum'}})  # or your style
                     xyzview.zoomTo()
