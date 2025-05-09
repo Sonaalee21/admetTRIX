@@ -5,3 +5,4 @@ numpy
 matplotlib
 stmol
 py3Dmol
+ipython_genutils
