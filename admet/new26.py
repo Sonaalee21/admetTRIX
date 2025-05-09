@@ -97,11 +97,11 @@ if RDKIT_AVAILABLE:
         bio = io.BytesIO(); img.save(bio, format='PNG')
         return bio.getvalue()
 
-if STMOL_AVAILABLE:
-if current_mol_data["xyz_str"]:
-        show_3d_structure(current_mol_data["xyz_str"])
-    else:
-        st.warning("Could not generate 3D structure.")
+        if STMOL_AVAILABLE:
+        if current_mol_data["xyz_str"]:
+            show_3d_structure(current_mol_data["xyz_str"])
+        else:
+            st.warning("Could not generate 3D structure.")
 
     def calculate_physicochemical_properties(mol):
         if not mol: return {"Error": "Invalid molecule object"}
