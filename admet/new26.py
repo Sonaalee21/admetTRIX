@@ -98,10 +98,10 @@ if RDKIT_AVAILABLE:
         return bio.getvalue()
 
         if STMOL_AVAILABLE:
-        if current_mol_data["xyz_str"]:
-            show_3d_structure(current_mol_data["xyz_str"])
-        else:
-            st.warning("Could not generate 3D structure.")
+    if current_mol_data["xyz_str"]:
+        show_3d_structure(current_mol_data["xyz_str"])
+    else:
+        st.warning("Could not generate 3D structure.")
 
     def calculate_physicochemical_properties(mol):
         if not mol: return {"Error": "Invalid molecule object"}
