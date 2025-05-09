@@ -594,16 +594,21 @@ elif nav_selected == "Analysis":
                     else: st.error("Could not generate 2D image.")
                 with col2_struct:
                     st.subheader("3D Structure")
-                 if STMOL_AVAILABLE:
-                 if current_mol_data["xyz_str"]:
-                     
-                     xyzview = py3Dmol.view(width=800, height=500)
-                     xyzview.addModel(current_mol_data["xyz_str"], "xyz")  # use "pdb" if appropriate
-                     xyzview.setStyle({'cartoon': {'color': 'spectrum'}})  # or your style
-                     xyzview.zoomTo()
-                     showmol(xyzview, height=500, width=800)
-                else:
-                     st.warning("Could not generate 3D structure.")
+            if STMOL_AVAILABLE:
+                
+                
+                if current_mol_data["xyz_str"]:
+                    
+                    xyzview = py3Dmol.view(width=800, height=500)
+                    xyzview.addModel(current_mol_data["xyz_str"], "xyz")  # use "pdb" if appropriate
+                    xyzview.setStyle({'cartoon': {'color': 'spectrum'}})  # or your style
+                    xyzview.zoomTo()
+                    showmol(xyzview, height=500, width=800)
+            else:
+                
+                
+                st.warning("Could not generate 3D structure.")
+
   
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
