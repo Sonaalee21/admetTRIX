@@ -61,13 +61,6 @@ def update_nav(label):
         st.session_state.selected_molecule_index = 0
         st.session_state.current_pubchem_search_results = None
 
-def show_3d_structure(xyz_str):
-    xyzview = py3Dmol.view(width=800, height=500)
-    xyzview.addModel(xyz_str, "xyz")
-    xyzview.setStyle({'stick': {}})
-    xyzview.zoomTo()
-    showmol(xyzview, height=500, width=800)
-
 # --- RDKIT/HELPER FUNCTIONS (Conditional on RDKit availability) ---
 if RDKIT_AVAILABLE:
     def get_mol_from_sdf_string(sdf_string):
@@ -97,11 +90,20 @@ if RDKIT_AVAILABLE:
         bio = io.BytesIO(); img.save(bio, format='PNG')
         return bio.getvalue()
 
-        if STMOL_AVAILABLE:
-    if current_mol_data["xyz_str"]:
-        show_3d_structure(current_mol_data["xyz_str"])
-    else:
-        st.warning("Could not generate 3D structure.")
+    def get_xyz_from_mol(mol):
+        if not mol: return None
+        try:
+            mol_3d = Chem.Mol(mol); mol_3d.RemoveAllConformers()
+            mol_3d_h = Chem.AddHs(mol_3d)
+            embed_params = AllChem.ETKDGv3(); embed_params.randomSeed = 0xf00d
+            embed_code = AllChem.EmbedMolecule(mol_3d_h, embed_params)
+            if embed_code == -1:
+                 embed_params_no_random = AllChem.ETKDGv3(); embed_params_no_random.useRandomCoords = False
+                 embed_code = AllChem.EmbedMolecule(mol_3d_h, embed_params_no_random)
+                 if embed_code == -1: return None
+            AllChem.UFFOptimizeMolecule(mol_3d_h)
+            return Chem.MolToXYZBlock(mol_3d_h)
+        except Exception: return None
 
     def calculate_physicochemical_properties(mol):
         if not mol: return {"Error": "Invalid molecule object"}
@@ -592,12 +594,13 @@ elif nav_selected == "Analysis":
                     else: st.error("Could not generate 2D image.")
                 with col2_struct:
                     st.subheader("3D Structure")
-            
-                
-                
-                st.warning("Could not generate 3D structure.")
-
-  
+                    if STMOL_AVAILABLE:
+                        if current_mol_data["xyz_str"]:
+                             showmol(current_mol_data["xyz_str"], style='stick', height=350, width=350, key=f"stmol_viewer_{st.session_state.selected_molecule_index}")
+                        else:
+                             st.warning("Could not generate 3D structure data (XYZ).")
+                    else:
+                        st.warning("⚠️ `stmol` library not installed. Install (`pip install stmol`) to view 3D structures.")
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
                 st.write(f"Search PubChem for compounds similar to: **{mol_name_display}**")
