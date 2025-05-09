@@ -594,18 +594,20 @@ elif nav_selected == "Analysis":
                     else: st.error("Could not generate 2D image.")
                 with col2_struct:
                     st.subheader("3D Structure")
-                   
-            if STMOL_AVAILABLE:
-                
-                if current_mol_data["xyz_str"]:
-                    
-                    view = py3Dmol.view(width=350, height=350)
-                    view.addModel(current_mol_data["xyz_str"], 'xyz')
-                    view.setStyle({'stick': {}})
-                    showmol(view, height=350, width=350, key=f"stmol_viewer_{st.session_state.selected_molecule_index}")
+     if STMOL_AVAILABLE:
+         
+        if current_mol_data["xyz_str"]:
+        # 1. Create a py3Dmol view
+            view = py3Dmol.view(width=350, height=350)
+        # 2. Add the XYZ model
+            view.addModel(current_mol_data["xyz_str"], 'xyz')
+        # 3. Set the style
+            view.setStyle({'stick': {}})
+        # 4. Show the molecule
+            showmol(view, height=350, width=350, key=f"stmol_viewer_{st.session_state.selected_molecule_index}")
     else:
-        
         st.warning("Could not generate 3D structure data (XYZ).")
+      
 
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
