@@ -579,21 +579,7 @@ elif nav_selected == "Analysis":
             mol_name_display = current_mol_data["name"]
             st.markdown(f"#### Detailed Results for: **{mol_name_display}**")
 
-            with st.expander("🖼️ Molecular Structure (2D/3D)", expanded=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("2D Structure")
-                    if current_mol_data["2d_image_bytes"]:
-                        st.image(current_mol_data["2d_image_bytes"])
-                        st.download_button("Download 2D Image", current_mol_data["2d_image_bytes"], f"{mol_name_display.replace(' ','_')}_2D.png", "image/png", key=f"dl_2d_{st.session_state.selected_molecule_index}")
-                    else: st.error("Could not generate 2D image.")
-                with col2: # 3D Structure Display
-                    st.subheader("3D Structure")
-                    if STMOL_AVAILABLE:
-                        if current_mol_data["xyz_str"]:
-                            showmol(current_mol_data["xyz_str"], style='stick', height=350, width=350, key=f"stmol_{st.session_state.selected_molecule_index}")
-                        else: st.warning("Could not generate 3D structure data (XYZ).")
-                    else: st.warning("⚠️ `stmol` library not installed. Cannot display 3D structures.")
+            
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
                 default_name = clean_molecule_name_for_pubchem(current_mol_data["name"])
