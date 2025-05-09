@@ -594,13 +594,17 @@ elif nav_selected == "Analysis":
                     else: st.error("Could not generate 2D image.")
                 with col2_struct:
                     st.subheader("3D Structure")
-                    if STMOL_AVAILABLE:
-                        if current_mol_data["xyz_str"]:
-                             showmol(current_mol_data["xyz_str"], style='stick', height=350, width=350, key=f"stmol_viewer_{st.session_state.selected_molecule_index}")
-                        else:
-                             st.warning("Could not generate 3D structure data (XYZ).")
-                    else:
-                        st.warning("⚠️ `stmol` library not installed. Install (`pip install stmol`) to view 3D structures.")
+                 if STMOL_AVAILABLE:
+                 if current_mol_data["xyz_str"]:
+                     
+                     xyzview = py3Dmol.view(width=800, height=500)
+                     xyzview.addModel(current_mol_data["xyz_str"], "xyz")  # use "pdb" if appropriate
+                     xyzview.setStyle({'cartoon': {'color': 'spectrum'}})  # or your style
+                     xyzview.zoomTo()
+                     showmol(xyzview, height=500, width=800)
+                else:
+                     st.warning("Could not generate 3D structure.")
+  
 
             with st.expander("🔗 Find Similar Compounds via PubChem", expanded=False):
                 st.write(f"Search PubChem for compounds similar to: **{mol_name_display}**")
