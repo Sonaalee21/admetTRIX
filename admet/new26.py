@@ -400,6 +400,7 @@ if nav_selected == "Home":
     <li><b>🧪 Physicochemical Properties Calculation</b>: Calculate key properties like LogP, MW, TPSA, etc.</li>
     <li><b>💊 Drug-likeness Rules Evaluation</b>: Assess compounds against common rules (Lipinski, Ghose, etc.).</li>
     <li><b>📈 Bioavailability Radar & BOILED-Egg Plots</b>: Visualize ADMET profiles with image download options.</li>
+    <li><b>📁 Data Download</b>: Download 2D images, plots, and 3D coordinate (XYZ) files.</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -416,7 +417,7 @@ elif nav_selected == "User Guide":
     <li><b>By PubChem Search</b>: Use the 'PubChem Search' tab. Search for a compound. Click "Use this SMILES for Analysis" on a result.</li>
     </ul>
     </div>
-    <div class="step-box"><b>Step 3: Explore Results</b><br>View the 2D/3D structures, properties, drug-likeness, and plots. Download options are available for generated 2D images and plots.</div>
+    <div class="step-box"><b>Step 3: Explore Results</b><br>View the 2D/3D structures, properties, drug-likeness, and plots. Download options are available for generated 2D images, plots, and 3D coordinate (XYZ) files.</div>
     <div class="step-box"><b>Important Note on RDKit:</b><br>This application requires RDKit, stmol, and py3Dmol. If you see an error at the top about these libraries not being installed, please ensure they are correctly set up in your Python environment. Plot generation also requires a working Matplotlib setup.</div>
     """, unsafe_allow_html=True)
 
@@ -609,31 +610,37 @@ elif nav_selected == "Analysis":
                     if display_data.get("img_2d_bytes"):
                         st.image(display_data["img_2d_bytes"], use_column_width=True)
                         st.download_button(
-                            label="Download 2D Structure", data=display_data["img_2d_bytes"],
+                            label="Download 2D Structure (PNG)", data=display_data["img_2d_bytes"],
                             file_name=f"{sanitized_mol_name}_2D_structure.png", mime="image/png",
                             key="download_2d_structure_btn"
                         )
                     else: st.warning("Could not generate 2D image.")
                     
                     st.markdown("##### 3D Structure (Interactive)")
-                    # Note: Direct image download for interactive 3D view (stmol) is not straightforward.
-                    # Users can typically screenshot. XYZ data download could be added if needed.
                     if STMOL_AVAILABLE and display_data.get("xyz_str"):
                         view = py3Dmol.view(width=450, height=400) 
                         view.addModel(display_data["xyz_str"], 'xyz'); view.setStyle({'stick':{}}) 
                         view.setBackgroundColor('0xeeeeee'); view.zoomTo()
-                        showmol(view, height=400, width=450) 
+                        showmol(view, height=400, width=450)
+                        # ADDED DOWNLOAD BUTTON FOR XYZ DATA
+                        st.download_button(
+                            label="Download 3D Coords (XYZ)",
+                            data=display_data["xyz_str"],
+                            file_name=f"{sanitized_mol_name}_3D_coordinates.xyz",
+                            mime="text/plain", # or chemical/x-xyz
+                            key="download_3d_xyz_btn"
+                        )
                     elif not display_data.get("xyz_str") and display_data.get("mol_3d_obj") is None and RDKIT_AVAILABLE:
-                         st.warning("3D coordinate generation failed. Cannot display 3D structure.")
+                         st.warning("3D coordinate generation failed. Cannot display 3D structure or provide XYZ data.")
                     elif not STMOL_AVAILABLE: st.warning("stmol/py3Dmol is not available for 3D visualization.")
-                    else: st.warning("Could not generate data for 3D structure display.")
+                    else: st.warning("Could not generate data for 3D structure display or XYZ download.")
                 
                 with col_plots:
                     st.markdown("##### Bioavailability Radar")
                     if display_data.get("radar_plot_bytes"):
                         st.image(display_data["radar_plot_bytes"], use_column_width=True)
                         st.download_button(
-                            label="Download Radar Plot", data=display_data["radar_plot_bytes"],
+                            label="Download Radar Plot (PNG)", data=display_data["radar_plot_bytes"],
                             file_name=f"{sanitized_mol_name}_bioavailability_radar.png", mime="image/png",
                             key="download_radar_plot_btn"
                         )
@@ -643,7 +650,7 @@ elif nav_selected == "Analysis":
                     if display_data.get("boiled_egg_bytes"):
                         st.image(display_data["boiled_egg_bytes"], use_column_width=True)
                         st.download_button(
-                            label="Download BOILED-Egg Plot", data=display_data["boiled_egg_bytes"],
+                            label="Download BOILED-Egg Plot (PNG)", data=display_data["boiled_egg_bytes"],
                             file_name=f"{sanitized_mol_name}_boiled_egg_plot.png", mime="image/png",
                             key="download_boiled_egg_btn"
                         )
@@ -652,7 +659,7 @@ elif nav_selected == "Analysis":
                 st.markdown("---"); st.markdown("##### Physicochemical Properties")
                 if display_data.get("phys_props"):
                     props_df = pd.DataFrame(list(display_data["phys_props"].items()), columns=['Property', 'Value'])
-                    for col in props_df.columns: # Format numeric values in the 'Value' column
+                    for col in props_df.columns: 
                         if col == 'Value' and pd.api.types.is_numeric_dtype(props_df[col]):
                             props_df[col] = props_df[col].apply(lambda x: f'{x:.2f}' if pd.notnull(x) and isinstance(x, (int, float)) else x)
                     st.dataframe(props_df, use_container_width=True, hide_index=True)
