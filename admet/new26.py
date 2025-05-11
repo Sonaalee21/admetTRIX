@@ -499,11 +499,7 @@ body, .stApp {
     text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.4);
     margin: 0 auto; /* Center title text within its column */
 }
-.gif-image { /* This class is available if needed but not directly used by st.image or current markdown solution */
-    height: 80px;
-    width: auto;
-    margin: 0 15px;
-}
+/* .gif-image class is not directly used for the header GIFs, they are styled inline */
 .stButton>button {
     border-radius: 25px !important; /* More rounded buttons */
     border: 1px solid #00796B !important;
@@ -613,12 +609,13 @@ div[data-baseweb="tab-list"] button > div > p {
 # --- HEADER & NAVIGATION BAR ---
 gif_url = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcmg4Nzl0Z3Q4eW9idmQ1dWVvbm0xZ3VxaHpmaXJkYWV1eDFja3QxNyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5Xfn2En9gZybm/giphy.gif"
 
-title_cols = st.columns([1, 2.5, 1]) # Relative widths: GIF | Title | GIF
+# Adjusted column ratios: GIFs get more space
+title_cols = st.columns([1.5, 2.5, 1.5]) 
 
 with title_cols[0]:
     st.markdown(f"""
-        <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
-            <img src="{gif_url}" style="height: 80px; width: auto; max-width: 100%;">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%; margin-top: 10px;">
+            <img src="{gif_url}" style="height: 110px; width: auto; max-width: 100%;">
         </div>
     """, unsafe_allow_html=True)
 
@@ -632,8 +629,8 @@ with title_cols[1]:
 
 with title_cols[2]:
     st.markdown(f"""
-        <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
-            <img src="{gif_url}" style="height: 80px; width: auto; max-width: 100%;">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%; margin-top: 10px;">
+            <img src="{gif_url}" style="height: 110px; width: auto; max-width: 100%;">
         </div>
     """, unsafe_allow_html=True)
 
